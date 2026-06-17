@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{Duration, MissedTickBehavior};
 
 use crate::models::connection::SshTunnelConfig;
+use crate::path_utils::expand_tilde;
 
 use super::file_validator::validate_file_path;
 
@@ -65,6 +66,7 @@ async fn connect_and_authenticate(
     ssh_key_path: &str,
     ssh_key_passphrase: &str,
     use_ssh_agent: bool,
+    agent_socket_path: &str,
     connect_timeout_secs: u64,
 ) -> Result<Handle<SshClient>, String> {
     let config = Arc::new(ssh_client_config());
@@ -108,7 +110,7 @@ async fn connect_and_authenticate(
             return Err("SSH password authentication failed".to_string());
         }
     } else if use_ssh_agent {
-        match try_authenticate_with_agent(&mut session, ssh_user, &connect_timeout).await {
+        match try_authenticate_with_agent(&mut session, ssh_user, agent_socket_path, &connect_timeout).await {
             Ok(()) => {}
             Err(agent_err) => return Err(agent_err),
         }
@@ -124,23 +126,14 @@ async fn connect_and_authenticate(
 async fn try_authenticate_with_agent(
     session: &mut Handle<SshClient>,
     ssh_user: &str,
+    agent_socket_path: &str,
     connect_timeout: &Duration,
 ) -> Result<(), String> {
     #[cfg(unix)]
-    let mut agent = match AgentClient::connect_env().await {
-        Ok(a) => a,
-        Err(e) => {
-            return Err(format!("No SSH password or key provided, and ssh-agent is unavailable: {e}"));
-        }
-    };
+    let mut agent = connect_unix_agent(agent_socket_path).await?;
 
     #[cfg(windows)]
-    let mut agent = {
-        let stream = pageant::PageantStream::new()
-            .await
-            .map_err(|e| format!("No SSH password or key provided, and ssh-agent (Pageant) is unavailable: {e}"))?;
-        AgentClient::connect(stream)
-    };
+    let mut agent = connect_windows_agent(agent_socket_path).await?;
 
     let identities = match agent.request_identities().await {
         Ok(ids) if ids.is_empty() => {
@@ -183,6 +176,45 @@ async fn try_authenticate_with_agent(
         Ok(Err(e)) => Err(e),
         Err(_) => Err("No SSH password or key provided, and ssh-agent auth timed out".to_string()),
     }
+}
+
+#[cfg(unix)]
+async fn connect_unix_agent(agent_socket_path: &str) -> Result<AgentClient<tokio::net::UnixStream>, String> {
+    let trimmed = agent_socket_path.trim();
+    if trimmed.contains('\0') {
+        return Err("No SSH password or key provided, and ssh-agent socket path contains null characters".to_string());
+    }
+
+    if trimmed.is_empty() {
+        return AgentClient::connect_env()
+            .await
+            .map_err(|e| format!("No SSH password or key provided, and ssh-agent is unavailable: {e}"));
+    }
+
+    let expanded = expand_tilde(trimmed);
+    AgentClient::connect_uds(&expanded)
+        .await
+        .map_err(|e| format!("No SSH password or key provided, and ssh-agent socket is unavailable at {trimmed}: {e}"))
+}
+
+#[cfg(windows)]
+async fn connect_windows_agent(
+    agent_socket_path: &str,
+) -> Result<AgentClient<Box<dyn russh::keys::agent::client::AgentStream + Send + Unpin + 'static>>, String> {
+    let trimmed = agent_socket_path.trim();
+    if trimmed.contains('\0') {
+        return Err("No SSH password or key provided, and ssh-agent socket path contains null characters".to_string());
+    }
+    if trimmed.is_empty() {
+        let stream = pageant::PageantStream::new()
+            .await
+            .map_err(|e| format!("No SSH password or key provided, and ssh-agent (Pageant) is unavailable: {e}"))?;
+        return Ok(AgentClient::connect(stream).dynamic());
+    }
+
+    AgentClient::connect_named_pipe(trimmed).await.map(AgentClient::dynamic).map_err(|e| {
+        format!("No SSH password or key provided, and ssh-agent named pipe is unavailable at {trimmed}: {e}")
+    })
 }
 
 fn load_ssh_private_key(path: &str, passphrase: Option<&str>) -> Result<PrivateKey, String> {
@@ -430,6 +462,7 @@ async fn tunnel_reconnect_loop(
     ssh_key_path: String,
     ssh_key_passphrase: String,
     use_ssh_agent: bool,
+    agent_socket_path: String,
     connect_timeout_secs: u64,
     listener: TcpListener,
     remote_host: String,
@@ -464,6 +497,7 @@ async fn tunnel_reconnect_loop(
                 &ssh_key_path,
                 &ssh_key_passphrase,
                 use_ssh_agent,
+                &agent_socket_path,
                 connect_timeout_secs,
             )
             .await
@@ -533,6 +567,7 @@ impl TunnelManager {
         ssh_key_path: &str,
         ssh_key_passphrase: &str,
         use_ssh_agent: bool,
+        agent_socket_path: &str,
         connect_timeout_secs: u64,
         remote_host: &str,
         remote_port: u16,
@@ -555,6 +590,7 @@ impl TunnelManager {
             ssh_key_path,
             ssh_key_passphrase,
             use_ssh_agent,
+            agent_socket_path,
             connect_timeout_secs,
             remote_host,
             remote_port,
@@ -624,6 +660,7 @@ impl TunnelManager {
                 &hop.key_path,
                 &hop.key_passphrase,
                 hop.use_ssh_agent,
+                &hop.agent_socket_path,
                 effective_hop_timeout(hop),
                 &target_host,
                 target_port,
@@ -671,6 +708,7 @@ async fn spawn_tunnel(
     ssh_key_path: &str,
     ssh_key_passphrase: &str,
     use_ssh_agent: bool,
+    agent_socket_path: &str,
     connect_timeout_secs: u64,
     remote_host: &str,
     remote_port: u16,
@@ -691,6 +729,7 @@ async fn spawn_tunnel(
         ssh_key_path,
         ssh_key_passphrase,
         use_ssh_agent,
+        agent_socket_path,
         connect_timeout_secs,
     )
     .await?;
@@ -704,6 +743,7 @@ async fn spawn_tunnel(
         ssh_key_path.to_string(),
         ssh_key_passphrase.to_string(),
         use_ssh_agent,
+        agent_socket_path.to_string(),
         connect_timeout_secs,
         listener,
         remote_host.to_string(),
@@ -801,6 +841,7 @@ mod tests {
             connect_timeout_secs: 5,
             expose_lan: false,
             use_ssh_agent: false,
+            agent_socket_path: String::new(),
         }
     }
 

@@ -122,6 +122,7 @@ export interface SshTunnelConfig {
   connect_timeout_secs?: number;
   expose_lan?: boolean;
   use_ssh_agent?: boolean;
+  agent_socket_path?: string;
 }
 
 export interface ProxyTunnelConfig {

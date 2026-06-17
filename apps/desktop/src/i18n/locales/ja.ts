@@ -302,6 +302,7 @@ export default {
     sshHopInvalidPort: "{hop}: SSHポートは1〜65535の範囲で指定してください",
     sshHopInvalidAuth: "{hop}: パスワード、鍵パス、またはssh-agentが必要です",
     sshUseAgent: "ssh-agentを使用",
+    sshAgentSocketPath: "Agentソケットパス",
     sshHopInvalidTimeout: "{hop}: SSHタイムアウトは1〜300秒の範囲で指定してください",
     connectTimeout: "接続タイムアウト（秒）",
     queryTimeout: "クエリタイムアウト（秒）",

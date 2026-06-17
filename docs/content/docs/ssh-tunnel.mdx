@@ -20,7 +20,7 @@ When creating or editing a connection, enable the SSH tunnel option:
 
 ## Authentication Methods
 
-<Tabs groupId="ssh-auth" items={['Private Key (Recommended)', 'Password']}>
+<Tabs groupId="ssh-auth" items={['Private Key (Recommended)', 'Password', 'ssh-agent']}>
   <Tab value="Private Key (Recommended)">
     Select a private key file (e.g., `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`):
 
@@ -32,6 +32,10 @@ When creating or editing a connection, enable the SSH tunnel option:
   </Tab>
   <Tab value="Password">
     Enter your SSH password directly. Works on servers that allow password authentication.
+  </Tab>
+  <Tab value="ssh-agent">
+    Enable **Use ssh-agent** to authenticate with identities from your local agent.
+    Leave **Agent Socket Path** empty to use `SSH_AUTH_SOCK`, or set a custom Unix socket path when DBX should use a specific agent.
   </Tab>
 </Tabs>
 

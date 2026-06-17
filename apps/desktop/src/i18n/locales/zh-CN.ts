@@ -304,6 +304,7 @@ export default {
     sshHopInvalidPort: "{hop}：SSH 端口必须在 1 到 65535 之间",
     sshHopInvalidAuth: "{hop}：需要填写密码、密钥路径或勾选使用 ssh-agent",
     sshUseAgent: "使用 ssh-agent",
+    sshAgentSocketPath: "Agent Socket 路径",
     sshHopInvalidTimeout: "{hop}：SSH 超时时间必须在 1 到 300 秒之间",
     connectTimeout: "连接超时（秒）",
     queryTimeout: "查询超时（秒）",
