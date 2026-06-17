@@ -752,6 +752,7 @@ mod tests {
             connect_timeout_secs: 5,
             expose_lan: false,
             use_ssh_agent: false,
+            agent_socket_path: String::new(),
         }
     }
 

@@ -288,6 +288,7 @@ export default {
     sshHopInvalidPort: "{hop}：SSH 埠必須在 1 到 65535 之間",
     sshHopInvalidAuth: "{hop}：需要填寫密碼、金鑰路徑或勾選使用 ssh-agent",
     sshUseAgent: "使用 ssh-agent",
+    sshAgentSocketPath: "Agent Socket 路徑",
     sshHopInvalidTimeout: "{hop}：SSH 逾時時間必須在 1 到 300 秒之間",
     connectTimeout: "連線逾時（秒）",
     queryTimeout: "查詢逾時（秒）",

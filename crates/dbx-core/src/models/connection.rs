@@ -148,6 +148,8 @@ pub struct SshTunnelConfig {
     pub expose_lan: bool,
     #[serde(default)]
     pub use_ssh_agent: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub agent_socket_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1428,7 +1430,7 @@ fn bracket_ipv6(host: &str) -> String {
 mod tests {
     use super::{
         default_query_timeout_secs, default_redis_key_separator, default_ssh_connect_timeout_secs, ConnectionConfig,
-        DatabaseType, ProxyTunnelConfig, ProxyType, TransportLayerConfig,
+        DatabaseType, ProxyTunnelConfig, ProxyType, SshTunnelConfig, TransportLayerConfig,
     };
     use std::str::FromStr;
 
@@ -1477,6 +1479,24 @@ mod tests {
             one_time: false,
             read_only: false,
         }
+    }
+
+    #[test]
+    fn ssh_tunnel_preserves_custom_agent_socket_path() {
+        let tunnel: SshTunnelConfig = serde_json::from_value(serde_json::json!({
+            "id": "hop-1",
+            "host": "bastion.example.com",
+            "port": 22,
+            "user": "deploy",
+            "use_ssh_agent": true,
+            "agent_socket_path": "/tmp/custom-ssh-agent.sock"
+        }))
+        .unwrap();
+
+        assert_eq!(tunnel.agent_socket_path, "/tmp/custom-ssh-agent.sock");
+
+        let json = serde_json::to_value(&tunnel).unwrap();
+        assert_eq!(json["agent_socket_path"], "/tmp/custom-ssh-agent.sock");
     }
 
     fn mongodb_config(username: &str, password: &str, database: Option<&str>) -> ConnectionConfig {
